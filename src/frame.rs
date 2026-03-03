@@ -20,6 +20,8 @@ pub struct FrameManifestEntry {
     pub timestamp: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<BoundingBox>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -148,6 +148,7 @@ fn process_document(
         phash: hash_hex,
         timestamp: None,
         bounds: Some(BoundingBox { corners: corners_arr }),
+        url: None,
     };
 
     Some((idx, entry, dest))

@@ -162,6 +162,7 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
             phash: dedup::hash_to_hex_string(hash),
             timestamp: frame_ref.timestamp,
             bounds: None,
+            url: None,
         });
 
         output_frames.push(dest);
