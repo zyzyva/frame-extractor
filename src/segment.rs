@@ -17,7 +17,6 @@ pub enum DetectionMethod {
 #[derive(Debug, Clone)]
 pub struct DetectedDocument {
     pub corners: [Point<i32>; 4],
-    pub area: f64,
 }
 
 pub fn detect_documents(
@@ -71,7 +70,7 @@ pub fn detect_documents(
             if verbose {
                 eprintln!("  Document detected: area={:.0}, corners={:?}", area, corners);
             }
-            documents.push(DetectedDocument { corners, area });
+            documents.push(DetectedDocument { corners });
         }
     }
 

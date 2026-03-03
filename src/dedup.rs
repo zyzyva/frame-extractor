@@ -16,21 +16,19 @@ pub fn compute_hash(path: &Path) -> Result<ImageHash, String> {
     Ok(hasher.hash_image(&img))
 }
 
-pub fn hash_to_bytes(hash: &ImageHash) -> [u8; 8] {
+pub fn hash_to_hex_string(hash: &ImageHash) -> String {
     let bytes = hash.as_bytes();
-    let mut arr = [0u8; 8];
     let len = bytes.len().min(8);
-    arr[..len].copy_from_slice(&bytes[..len]);
-    arr
+    bytes[..len].iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-pub fn hash_to_hex(bytes: &[u8; 8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
-pub fn deduplicate(frames: &mut Vec<Frame>, hashes: &[ImageHash], threshold: u32) {
+pub fn deduplicate(
+    frames: &mut Vec<Frame>,
+    hashes: &[ImageHash],
+    threshold: u32,
+) -> Vec<ImageHash> {
     if frames.is_empty() {
-        return;
+        return vec![];
     }
 
     let mut keep = vec![true; frames.len()];
@@ -58,10 +56,19 @@ pub fn deduplicate(frames: &mut Vec<Frame>, hashes: &[ImageHash], threshold: u32
         }
     }
 
+    let surviving_hashes: Vec<ImageHash> = hashes
+        .iter()
+        .zip(keep.iter())
+        .filter(|(_, k)| **k)
+        .map(|(h, _)| h.clone())
+        .collect();
+
     let mut idx = 0;
     frames.retain(|_| {
         let k = keep[idx];
         idx += 1;
         k
     });
+
+    surviving_hashes
 }

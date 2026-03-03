@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub path: PathBuf,
-    pub index: usize,
     pub blur_score: f64,
     pub timestamp: Option<f64>,
 }
@@ -36,4 +36,32 @@ pub struct Manifest {
     pub total_candidates: usize,
     pub after_dedup: usize,
     pub frames: Vec<FrameManifestEntry>,
+}
+
+pub fn write_manifest(
+    output_dir: &Path,
+    mode: &str,
+    input: &Path,
+    settings: serde_json::Value,
+    total_candidates: usize,
+    entries: &[FrameManifestEntry],
+    complete: bool,
+) -> Result<(), String> {
+    let manifest = Manifest {
+        mode: mode.to_string(),
+        input_file: input.to_string_lossy().to_string(),
+        settings,
+        status: if complete { "complete" } else { "processing" }.to_string(),
+        total_candidates,
+        after_dedup: entries.len(),
+        frames: entries.to_vec(),
+    };
+
+    let json = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| format!("Failed to serialize manifest: {}", e))?;
+
+    fs::write(output_dir.join("manifest.json"), json)
+        .map_err(|e| format!("Failed to write manifest: {}", e))?;
+
+    Ok(())
 }
