@@ -33,7 +33,7 @@ enum Command {
         output: PathBuf,
 
         /// Scene change sensitivity (0.0 to 1.0, lower = more sensitive)
-        #[arg(short, long, default_value = "0.3")]
+        #[arg(short, long, default_value = "0.08")]
         scene_threshold: f64,
 
         /// Minimum sharpness score (auto-calculated if not set)
@@ -41,7 +41,7 @@ enum Command {
         blur_threshold: Option<f64>,
 
         /// Max hamming distance for duplicate detection
-        #[arg(short, long, default_value = "10")]
+        #[arg(short, long, default_value = "5")]
         dedup_threshold: u32,
 
         /// Skip deduplication, keep all sharp frames
