@@ -72,7 +72,8 @@ frame-extractor video <input.mp4> [options]
 - [x] Default threshold 5 (tuned for text documents — tighter than general use)
 - [x] Configurable via `-d` / `--dedup-threshold`
 - [x] `--keep-all` to skip dedup entirely
-- **Implementation**: `src/dedup.rs` — `compute_hash()`, `deduplicate()`
+- [x] Returns surviving hashes alongside surviving frames (avoids recomputation)
+- **Implementation**: `src/dedup.rs` — `compute_hash()`, `deduplicate()`, `hash_to_hex_string()`
 
 ### 1.4 Parallel Processing
 - [x] Blur scoring and hash computation run in parallel via rayon `par_iter`
@@ -113,21 +114,23 @@ frame-extractor spread <input.jpg> [options]
 
 ### 2.2 Rectangle Detection
 - [x] Douglas-Peucker polygon simplification with decreasing epsilon (0.05 → 0.01 of perimeter)
+- [x] Perimeter approximation via Euclidean segment distances
 - [x] Targets exactly 4 vertices (rectangle)
 - [x] Fallback: `min_area_rect` for contours that don't simplify to 4 points
-- **Implementation**: `src/segment.rs` — `find_rectangle()`
+- **Implementation**: `src/segment.rs` — `find_rectangle()`, `approximate_perimeter()`; struct `DetectedDocument { corners: [Point<i32>; 4] }`
 
 ### 2.3 Perspective Correction
 - [x] Corner ordering: sorted by coordinate sum/difference (top-left, top-right, bottom-right, bottom-left)
 - [x] Output dimensions computed from max corner distances
 - [x] Homography via `Projection::from_control_points` (imageproc)
 - [x] Bilinear interpolation warp
-- [x] `--no-perspective` to skip correction and just crop bounding box
-- **Implementation**: `src/perspective.rs` — `order_corners()`, `correct_perspective()`
+- [x] `--no-perspective` to skip correction and just crop bounding box (uses `bounding_rect()` fallback)
+- **Implementation**: `src/perspective.rs` — `order_corners()`, `compute_output_dimensions()`, `correct_perspective()`
 
 ### 2.4 Parallel Processing
 - [x] All document extractions (perspective correct + score + hash) run in parallel via rayon
-- **Implementation**: `src/pipeline_spread.rs` — `run()`
+- [x] Each document processed independently via `process_document()` — perspective correct, save, blur score, hash
+- **Implementation**: `src/pipeline_spread.rs` — `run()`, `process_document()`
 
 ### Options
 | Flag | Default | Description |
@@ -296,8 +299,46 @@ Auto-detected from environment. When credentials are present, frames upload to C
 
 ---
 
-## 7. Architecture
+## 7. Data Structures
 
+### Internal
+| Struct | Module | Fields | Purpose |
+|---|---|---|---|
+| `Frame` | frame.rs | path, blur_score, timestamp | Internal frame during pipeline processing |
+| `DetectedDocument` | segment.rs | corners: [Point<i32>; 4] | Rectangle detected in spread mode |
+| `PipelineConfig` | pipeline_video.rs | scene_threshold, blur_threshold, dedup_threshold, output_ext, keep_all, dry_run, write_manifest, verbose | Video mode configuration |
+| `PipelineResult` | pipeline_video.rs | total_candidates, after_blur, after_dedup, output_frames | Video mode result |
+| `SpreadConfig` | pipeline_spread.rs | min_area_pct, max_area_pct, method, output_ext, no_perspective, write_manifest, verbose | Spread mode configuration |
+| `SpreadResult` | pipeline_spread.rs | total_detected, after_dedup, output_frames | Spread mode result |
+| `R2Config` | upload.rs | account_id, access_key, secret_key, bucket_name, prefix | R2 connection config (from_env() constructor) |
+
+### Serialized (manifest.json)
+| Struct | Module | Purpose |
+|---|---|---|
+| `Manifest` | frame.rs | Top-level manifest structure |
+| `FrameManifestEntry` | frame.rs | Per-frame entry with index, filename, blur_score, phash, timestamp, bounds, url |
+| `BoundingBox` | frame.rs | 4-corner coordinates for spread mode documents |
+
+### Enums
+| Enum | Module | Variants | Purpose |
+|---|---|---|---|
+| `DetectionMethod` | segment.rs | Threshold, Edge, Auto | Spread mode segmentation strategy |
+
+---
+
+## 8. Global CLI Flags
+
+These flags apply to both `video` and `spread` subcommands:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--local` | false | Skip R2 upload even if credentials are present |
+
+---
+
+## 9. Architecture
+
+### Module Dependency Graph
 ```
 main.rs              CLI parsing, R2 detection, orchestration
   |
@@ -319,7 +360,7 @@ main.rs              CLI parsing, R2 detection, orchestration
 
 ---
 
-## Revision History
+## 10. Revision History
 
 | Date | Change |
 |---|---|
