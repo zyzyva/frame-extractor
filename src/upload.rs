@@ -15,14 +15,14 @@ pub struct R2Config {
 
 impl R2Config {
     pub fn from_env(prefix: &str) -> Result<Self, String> {
-        let account_id = std::env::var("R2_ACCOUNT_ID")
-            .map_err(|_| "R2_ACCOUNT_ID not set")?;
-        let access_key = std::env::var("R2_ACCESS_KEY_ID")
-            .map_err(|_| "R2_ACCESS_KEY_ID not set")?;
-        let secret_key = std::env::var("R2_SECRET_ACCESS_KEY")
-            .map_err(|_| "R2_SECRET_ACCESS_KEY not set")?;
-        let bucket_name = std::env::var("R2_BUCKET")
-            .map_err(|_| "R2_BUCKET not set")?;
+        let account_id = std::env::var("FRAME_EXTRACTOR_R2_ACCOUNT_ID")
+            .map_err(|_| "FRAME_EXTRACTOR_R2_ACCOUNT_ID not set")?;
+        let access_key = std::env::var("FRAME_EXTRACTOR_R2_ACCESS_KEY_ID")
+            .map_err(|_| "FRAME_EXTRACTOR_R2_ACCESS_KEY_ID not set")?;
+        let secret_key = std::env::var("FRAME_EXTRACTOR_R2_SECRET_ACCESS_KEY")
+            .map_err(|_| "FRAME_EXTRACTOR_R2_SECRET_ACCESS_KEY not set")?;
+        let bucket_name = std::env::var("FRAME_EXTRACTOR_R2_BUCKET")
+            .map_err(|_| "FRAME_EXTRACTOR_R2_BUCKET not set")?;
 
         Ok(R2Config {
             account_id,

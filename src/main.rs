@@ -126,7 +126,7 @@ fn main() {
     let r2_available = !cli.local && R2Config::from_env("").is_ok();
 
     if r2_available {
-        let bucket = std::env::var("R2_BUCKET").unwrap_or_default();
+        let bucket = std::env::var("FRAME_EXTRACTOR_R2_BUCKET").unwrap_or_default();
         eprintln!("R2 upload enabled (bucket: {}). Use --local to keep frames local only.", bucket);
     }
 
