@@ -1,14 +1,19 @@
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 use ffmpeg_sidecar::command::FfmpegCommand;
 
-pub fn extract_scene_frames(
+/// Extract scene-change frames from video, sending each frame path through
+/// the channel as soon as ffmpeg writes it. This allows downstream processing
+/// to start while ffmpeg is still extracting.
+pub fn extract_scene_frames_streaming(
     input: &Path,
     temp_dir: &Path,
     scene_threshold: f64,
-) -> Result<Vec<PathBuf>, String> {
+) -> Result<mpsc::Receiver<PathBuf>, String> {
     let output_pattern = temp_dir.join("candidate_%04d.png");
-
     let filter = format!("select='gt(scene,{})',setpts=N/FRAME_RATE/TB", scene_threshold);
 
     let mut child = FfmpegCommand::new()
@@ -21,27 +26,63 @@ pub fn extract_scene_frames(
         .spawn()
         .map_err(|e| format!("Failed to spawn ffmpeg: {}", e))?;
 
-    let status = child
-        .wait()
-        .map_err(|e| format!("ffmpeg process error: {}", e))?;
+    let (tx, rx) = mpsc::channel();
+    let watch_dir = temp_dir.to_path_buf();
 
-    if !status.success() {
-        return Err(format!("ffmpeg exited with status: {}", status));
-    }
+    // Watcher thread: polls the temp dir for new PNG files
+    thread::spawn(move || {
+        let mut seen = std::collections::HashSet::new();
 
-    let mut frames: Vec<PathBuf> = std::fs::read_dir(temp_dir)
-        .map_err(|e| format!("Failed to read temp dir: {}", e))?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("png") {
-                Some(path)
-            } else {
-                None
+        loop {
+            if let Ok(entries) = std::fs::read_dir(&watch_dir) {
+                let mut new_files: Vec<PathBuf> = entries
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| {
+                        p.extension().and_then(|e| e.to_str()) == Some("png") && !seen.contains(p)
+                    })
+                    .collect();
+
+                new_files.sort();
+
+                for path in new_files {
+                    seen.insert(path.clone());
+                    if tx.send(path).is_err() {
+                        return; // Receiver dropped
+                    }
+                }
             }
-        })
-        .collect();
 
-    frames.sort();
-    Ok(frames)
+            // Check if ffmpeg is done
+            match child.as_inner_mut().try_wait() {
+                Ok(Some(_)) => {
+                    // ffmpeg finished — do one final scan for any remaining files
+                    if let Ok(entries) = std::fs::read_dir(&watch_dir) {
+                        let mut final_files: Vec<PathBuf> = entries
+                            .filter_map(|e| e.ok())
+                            .map(|e| e.path())
+                            .filter(|p| {
+                                p.extension().and_then(|e| e.to_str()) == Some("png")
+                                    && !seen.contains(p)
+                            })
+                            .collect();
+
+                        final_files.sort();
+
+                        for path in final_files {
+                            let _ = tx.send(path);
+                        }
+                    }
+                    return;
+                }
+                Ok(None) => {} // Still running
+                Err(_) => return,
+            }
+
+            thread::sleep(Duration::from_millis(50));
+        }
+    });
+
+    Ok(rx)
 }
+

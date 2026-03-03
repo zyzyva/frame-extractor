@@ -12,6 +12,7 @@ use imageproc::point::Point;
 pub enum DetectionMethod {
     Threshold,
     Edge,
+    Auto,
 }
 
 #[derive(Debug, Clone)]
@@ -26,10 +27,48 @@ pub fn detect_documents(
     max_area_pct: f64,
     verbose: bool,
 ) -> Vec<DetectedDocument> {
+    match method {
+        DetectionMethod::Auto => {
+            if verbose {
+                eprintln!("Auto-detecting best method...");
+            }
+            let thresh_docs = detect_with_method(gray, DetectionMethod::Threshold, min_area_pct, max_area_pct, false);
+            let edge_docs = detect_with_method(gray, DetectionMethod::Edge, min_area_pct, max_area_pct, false);
+
+            if verbose {
+                eprintln!("  Threshold method: {} documents", thresh_docs.len());
+                eprintln!("  Edge method: {} documents", edge_docs.len());
+            }
+
+            // Pick the method that found more documents — more detections means
+            // better separation of the foreground from background
+            if edge_docs.len() > thresh_docs.len() {
+                if verbose {
+                    eprintln!("  Selected: Edge method");
+                }
+                edge_docs
+            } else {
+                if verbose {
+                    eprintln!("  Selected: Threshold method");
+                }
+                thresh_docs
+            }
+        }
+        specific => detect_with_method(gray, specific, min_area_pct, max_area_pct, verbose),
+    }
+}
+
+fn detect_with_method(
+    gray: &GrayImage,
+    method: DetectionMethod,
+    min_area_pct: f64,
+    max_area_pct: f64,
+    verbose: bool,
+) -> Vec<DetectedDocument> {
     let blurred = gaussian_blur_f32(gray, 3.0);
 
     let binary = match method {
-        DetectionMethod::Threshold => {
+        DetectionMethod::Threshold | DetectionMethod::Auto => {
             let thresh = adaptive_threshold(&blurred, 15, -10);
             let closed = close(&thresh, Norm::L1, 3);
             open(&closed, Norm::L1, 2)

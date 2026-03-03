@@ -14,6 +14,7 @@ pub struct SpreadConfig {
     pub min_area_pct: f64,
     pub max_area_pct: f64,
     pub method: DetectionMethod,
+    pub output_ext: String,
     pub no_perspective: bool,
     pub write_manifest: bool,
     pub verbose: bool,
@@ -116,7 +117,7 @@ fn process_document(
 ) -> Option<(usize, FrameManifestEntry, PathBuf)> {
     let ordered = perspective::order_corners(&doc.corners);
 
-    let filename = format!("doc_{:03}.png", idx + 1);
+    let filename = format!("doc_{:03}.{}", idx + 1, config.output_ext);
     let dest = output_dir.join(&filename);
 
     if config.no_perspective {

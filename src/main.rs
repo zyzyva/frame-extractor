@@ -45,6 +45,10 @@ enum Command {
         #[arg(short, long, default_value = "5")]
         dedup_threshold: u32,
 
+        /// Output format: jpg or png
+        #[arg(short, long, default_value = "jpg")]
+        format: String,
+
         /// Skip deduplication, keep all sharp frames
         #[arg(long)]
         keep_all: bool,
@@ -83,9 +87,13 @@ enum Command {
         #[arg(long, default_value = "90.0")]
         max_area: f64,
 
-        /// Detection method: threshold or edge
-        #[arg(long, default_value = "threshold")]
+        /// Detection method: auto, threshold, or edge
+        #[arg(long, default_value = "auto")]
         method: String,
+
+        /// Output format: jpg or png
+        #[arg(short, long, default_value = "jpg")]
+        format: String,
 
         /// Skip perspective correction, just crop bounding box
         #[arg(long)]
@@ -115,6 +123,7 @@ fn main() {
             scene_threshold,
             blur_threshold,
             dedup_threshold,
+            format,
             keep_all,
             dry_run,
             raw,
@@ -126,10 +135,13 @@ fn main() {
                 std::process::exit(1);
             }
 
+            let ext = parse_format(&format);
+
             let config = pipeline_video::PipelineConfig {
                 scene_threshold,
                 blur_threshold,
                 dedup_threshold,
+                output_ext: ext.to_string(),
                 keep_all,
                 dry_run,
                 write_manifest: !no_manifest,
@@ -165,6 +177,7 @@ fn main() {
             min_area,
             max_area,
             method,
+            format,
             no_perspective,
             raw,
             no_manifest,
@@ -175,15 +188,19 @@ fn main() {
                 std::process::exit(1);
             }
 
+            let ext = parse_format(&format);
+
             let detection_method = match method.as_str() {
+                "threshold" => DetectionMethod::Threshold,
                 "edge" => DetectionMethod::Edge,
-                _ => DetectionMethod::Threshold,
+                _ => DetectionMethod::Auto,
             };
 
             let config = pipeline_spread::SpreadConfig {
                 min_area_pct: min_area,
                 max_area_pct: max_area,
                 method: detection_method,
+                output_ext: ext.to_string(),
                 no_perspective,
                 write_manifest: !no_manifest,
                 verbose,
@@ -211,6 +228,13 @@ fn main() {
                 }
             }
         }
+    }
+}
+
+fn parse_format(format: &str) -> &str {
+    match format.to_lowercase().as_str() {
+        "png" => "png",
+        _ => "jpg",
     }
 }
 
