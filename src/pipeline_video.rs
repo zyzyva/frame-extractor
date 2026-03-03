@@ -6,7 +6,7 @@ use rayon::prelude::*;
 
 use crate::blur;
 use crate::dedup;
-use crate::frame::{Frame, FrameManifestEntry, Manifest, ManifestSettings};
+use crate::frame::{Frame, FrameManifestEntry, Manifest};
 use crate::scene;
 
 pub struct PipelineConfig {
@@ -33,7 +33,6 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
     let temp_dir = tempfile::tempdir()
         .map_err(|e| format!("Failed to create temp dir: {}", e))?;
 
-    // Step 1: Scene change detection
     if config.verbose {
         eprintln!("Extracting candidate frames (scene threshold: {})...", config.scene_threshold);
     }
@@ -54,7 +53,6 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
         });
     }
 
-    // Step 2: Parallel blur scoring + hashing
     if config.verbose {
         eprintln!("Scoring sharpness and computing hashes in parallel...");
     }
@@ -82,7 +80,6 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
         })
         .collect();
 
-    // Determine blur threshold
     let all_scores: Vec<f64> = scored.iter().map(|(f, _)| f.blur_score).collect();
     let blur_threshold = config.blur_threshold.unwrap_or_else(|| blur::auto_threshold(&all_scores));
 
@@ -90,7 +87,6 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
         eprintln!("Blur threshold: {:.1}", blur_threshold);
     }
 
-    // Filter by blur score
     let (mut frames, hashes): (Vec<Frame>, Vec<ImageHash>) = scored
         .into_iter()
         .filter(|(f, _)| f.blur_score >= blur_threshold)
@@ -102,7 +98,6 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
         eprintln!("{} frames passed blur rejection", after_blur);
     }
 
-    // Step 3: Deduplication
     if !config.keep_all {
         dedup::deduplicate(&mut frames, &hashes, config.dedup_threshold);
     }
@@ -123,7 +118,6 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
         });
     }
 
-    // Step 4: Streaming output — write frames as they're ready
     let mut output_frames = Vec::with_capacity(after_dedup);
     let mut manifest_entries = Vec::with_capacity(after_dedup);
 
@@ -134,7 +128,6 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
         fs::copy(&frame.path, &dest)
             .map_err(|e| format!("Failed to copy frame: {}", e))?;
 
-        // Recompute hash for manifest (cheap — frame is already on disk)
         let hash_hex = dedup::compute_hash(&dest)
             .map(|h| {
                 let bytes = dedup::hash_to_bytes(&h);
@@ -148,37 +141,18 @@ pub fn run(input: &Path, output_dir: &Path, config: &PipelineConfig) -> Result<P
             blur_score: frame.blur_score,
             phash: hash_hex,
             timestamp: frame.timestamp,
+            bounds: None,
         });
 
         output_frames.push(dest);
 
-        // Write incremental manifest after each frame
         if config.write_manifest {
-            write_manifest(
-                output_dir,
-                input,
-                config,
-                blur_threshold,
-                total_candidates,
-                after_blur,
-                &manifest_entries,
-                false,
-            )?;
+            write_manifest(output_dir, input, config, blur_threshold, total_candidates, &manifest_entries, false)?;
         }
     }
 
-    // Final manifest with complete status
     if config.write_manifest {
-        write_manifest(
-            output_dir,
-            input,
-            config,
-            blur_threshold,
-            total_candidates,
-            after_blur,
-            &manifest_entries,
-            true,
-        )?;
+        write_manifest(output_dir, input, config, blur_threshold, total_candidates, &manifest_entries, true)?;
     }
 
     Ok(PipelineResult {
@@ -195,28 +169,23 @@ fn write_manifest(
     config: &PipelineConfig,
     blur_threshold: f64,
     total_candidates: usize,
-    after_blur: usize,
     entries: &[FrameManifestEntry],
     complete: bool,
 ) -> Result<(), String> {
+    let settings = serde_json::json!({
+        "scene_threshold": config.scene_threshold,
+        "blur_threshold": blur_threshold,
+        "dedup_threshold": config.dedup_threshold,
+    });
+
     let manifest = Manifest {
+        mode: "video".to_string(),
         input_file: input.to_string_lossy().to_string(),
-        settings: ManifestSettings {
-            scene_threshold: config.scene_threshold,
-            blur_threshold,
-            dedup_threshold: config.dedup_threshold,
-        },
+        settings,
         status: if complete { "complete".to_string() } else { "processing".to_string() },
         total_candidates,
-        after_blur_rejection: after_blur,
         after_dedup: entries.len(),
-        frames: entries.iter().map(|e| FrameManifestEntry {
-            index: e.index,
-            filename: e.filename.clone(),
-            blur_score: e.blur_score,
-            phash: e.phash.clone(),
-            timestamp: e.timestamp,
-        }).collect(),
+        frames: entries.to_vec(),
     };
 
     let json = serde_json::to_string_pretty(&manifest)

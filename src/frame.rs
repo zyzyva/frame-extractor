@@ -10,7 +10,7 @@ pub struct Frame {
     pub timestamp: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FrameManifestEntry {
     pub index: usize,
     pub filename: String,
@@ -18,22 +18,22 @@ pub struct FrameManifestEntry {
     pub phash: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounds: Option<BoundingBox>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BoundingBox {
+    pub corners: [[f32; 2]; 4],
 }
 
 #[derive(Debug, Serialize)]
 pub struct Manifest {
+    pub mode: String,
     pub input_file: String,
-    pub settings: ManifestSettings,
+    pub settings: serde_json::Value,
     pub status: String,
     pub total_candidates: usize,
-    pub after_blur_rejection: usize,
     pub after_dedup: usize,
     pub frames: Vec<FrameManifestEntry>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ManifestSettings {
-    pub scene_threshold: f64,
-    pub blur_threshold: f64,
-    pub dedup_threshold: u32,
 }
