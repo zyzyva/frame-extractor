@@ -1,6 +1,7 @@
 mod blur;
 mod dedup;
 mod frame;
+mod optimize;
 mod perspective;
 mod pipeline_spread;
 mod pipeline_video;
@@ -56,6 +57,10 @@ enum Command {
         #[arg(long)]
         no_manifest: bool,
 
+        /// Skip OCR optimization, output raw frames
+        #[arg(long)]
+        raw: bool,
+
         /// Show per-frame scores
         #[arg(short, long)]
         verbose: bool,
@@ -90,6 +95,10 @@ enum Command {
         #[arg(long)]
         no_manifest: bool,
 
+        /// Skip OCR optimization, output raw frames
+        #[arg(long)]
+        raw: bool,
+
         /// Show detection details
         #[arg(short, long)]
         verbose: bool,
@@ -108,6 +117,7 @@ fn main() {
             dedup_threshold,
             keep_all,
             dry_run,
+            raw,
             no_manifest,
             verbose,
         } => {
@@ -128,6 +138,12 @@ fn main() {
 
             match pipeline_video::run(&input, &output, &config) {
                 Ok(result) => {
+                    if !raw && !result.output_frames.is_empty() {
+                        if verbose {
+                            eprintln!("Optimizing frames for OCR...");
+                        }
+                        optimize_frames(&result.output_frames, verbose);
+                    }
                     println!(
                         "Done: {} candidates -> {} after blur rejection -> {} final frames",
                         result.total_candidates, result.after_blur, result.after_dedup
@@ -150,6 +166,7 @@ fn main() {
             max_area,
             method,
             no_perspective,
+            raw,
             no_manifest,
             verbose,
         } => {
@@ -174,6 +191,12 @@ fn main() {
 
             match pipeline_spread::run(&input, &output, &config) {
                 Ok(result) => {
+                    if !raw && !result.output_frames.is_empty() {
+                        if verbose {
+                            eprintln!("Optimizing documents for OCR...");
+                        }
+                        optimize_frames(&result.output_frames, verbose);
+                    }
                     println!(
                         "Done: {} documents detected -> {} after dedup",
                         result.total_detected, result.after_dedup
@@ -189,4 +212,14 @@ fn main() {
             }
         }
     }
+}
+
+fn optimize_frames(frames: &[PathBuf], verbose: bool) {
+    use rayon::prelude::*;
+
+    frames.par_iter().for_each(|path| {
+        if let Err(e) = optimize::optimize_for_ocr(path, 300, verbose) {
+            eprintln!("  Warning: optimization failed for {}: {}", path.display(), e);
+        }
+    });
 }
