@@ -1,0 +1,16 @@
+[package]
+name = "frame-extractor"
+version = "0.1.0"
+edition = "2024"
+description = "Extract clean, deduplicated document frames from video"
+
+[dependencies]
+ffmpeg-sidecar = "2.4"
+image = "0.25.9"
+imageproc = "0.26.1"
+image_hasher = "3.1.1"
+rayon = "1.11"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
